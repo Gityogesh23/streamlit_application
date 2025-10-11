@@ -1,10 +1,10 @@
-FROM python:3.10-slim-bookworm
+1)FROM python:3.10-slim-bookworm
 
-WORKDIR /app
+4) WORKDIR /app
 
 # Install only dependencies first (better caching, smaller layers)
 COPY requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
+3) RUN pip install --no-cache-dir -r requirements.txt
 
 # Then copy source code
 COPY . .
@@ -24,6 +24,6 @@ ENTRYPOINT ["streamlit", "run", "app.py", "--server.port=8501", "--server.addres
 
 #COPY . /app
 
-#RUN pip3 install -r requirements.txt
+2)#RUN pip3 install -r requirements.txt
 
 #ENTRYPOINT ["streamlit", "run", "app.py", "--server.port=8501", "--server.address=0.0.0.0"]
