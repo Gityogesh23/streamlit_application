@@ -1,10 +1,6 @@
 pipeline {
     agent any
-
-    environment {
-        DOCKER_CREDENTIALS = credentials('docker-hub-token') // your Jenkins credentials ID
-    }
-
+    
     stages {
         stage('Checkout') {
             steps {
@@ -21,9 +17,19 @@ pipeline {
         stage('Push Docker Image') {
             steps {
                 script {
-                    // Login using Docker token securely
-                    sh "echo \$DOCKER_CREDENTIALS_PSW | docker login -u \$DOCKER_CREDENTIALS_USR --password-stdin"
-                    sh 'docker push yogeshpatil23/streamlit-app'
+                    // Use withCredentials to correctly load the username and password/token
+                    withCredentials([usernamePassword(
+                        credentialsId: 'docker-hub-token', // <--- Your Jenkins Credential ID
+                        usernameVariable: 'DOCKER_USER',   // <--- Variable for Username
+                        passwordVariable: 'DOCKER_PASS'    // <--- Variable for Token/Password
+                    )]) {
+                        // Login securely using STDIN for the password/token
+                        sh "echo \$DOCKER_PASS | docker login -u \$DOCKER_USER --password-stdin"
+                        
+                        // Perform the push
+                        sh 'docker push yogeshpatil23/streamlit-app'
+                    }
+                    // Credentials variables DOCKER_USER and DOCKER_PASS are automatically cleared here
                 }
             }
         }
