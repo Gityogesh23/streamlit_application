@@ -1,34 +1,45 @@
-FROM python:3.10-slim-bookworm
+# --- STAGE 1: Builder (The "Heavy" Stage) ---
+FROM python:3.10-slim-bookworm AS builder
 
-# 1. Set environment variables (Standard for Python Docker)
 ENV PYTHONDONTWRITEBYTECODE=1 \
-    PYTHONUNBUFFERED=1 \
-    PATH="/home/appuser/.local/bin:${PATH}"
+    PYTHONUNBUFFERED=1
 
 WORKDIR /app
 
-# 2. Install system-level dependencies as ROOT
+# Install only what's needed to compile dependencies
 RUN apt-get update && apt-get install -y --no-install-recommends \
     build-essential \
+    gcc \
     && rm -rf /var/lib/apt/lists/*
 
-# 3. Create the user BEFORE installing Python packages
-RUN useradd -m appuser
-
-# 4. Copy requirements and install AS THE USER
-# This avoids the permission error because the user owns their own home dir
+# Install dependencies to a specific folder
 COPY requirements.txt .
-USER appuser
-RUN pip install --no-cache-dir --upgrade pip \
-    && pip install --no-cache-dir --user -r requirements.txt
+RUN pip install --no-cache-dir --prefix=/install -r requirements.txt
 
-# 5. Copy the rest of the code with correct ownership
+
+# --- STAGE 2: Runtime (The "Tiny" Stage) ---
+FROM python:3.10-slim-bookworm
+
+# Standard Python pathing for the /install folder
+ENV PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1 \
+    PATH="/home/appuser/.local/bin:/install/bin:${PATH}" \
+    PYTHONPATH="/install/lib/python3.10/site-packages"
+
+WORKDIR /app
+
+# Create a non-privileged user
+RUN useradd -m appuser && chown -R appuser /app
+
+# COPY ONLY the installed packages from the builder (Stripping out build-essential/gcc)
+COPY --from=builder --chown=appuser:appuser /install /install
 COPY --chown=appuser:appuser . .
+
+USER appuser
 
 EXPOSE 8501
 
-HEALTHCHECK CMD curl --fail http://localhost:8501/_stcore/health
-
+# Best practice: use ["executable", "param"] syntax
 ENTRYPOINT ["streamlit", "run", "app.py", "--server.port=8501", "--server.address=0.0.0.0"]
 # FROM python:3.10-slim-bookworm
 # # Expose the standard Streamlit port.
