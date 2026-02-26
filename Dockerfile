@@ -1,39 +1,28 @@
-# --- Stage 1: Builder ---
-FROM python:3.10-slim-bookworm AS builder
-
-# Prevent python from writing pyc files and buffering stdout/stderr
-ENV PYTHONDONTWRITEBYTECODE=1 \
-    PYTHONUNBUFFERED=1
-
-WORKDIR /app
-
-# Install build dependencies
-RUN apt-get update && apt-get install -y --no-install-recommends \
-    build-essential \
-    git \
-    && rm -rf /var/lib/apt/lists/*
-
-# Install dependencies into a temporary location
-COPY requirements.txt .
-RUN pip install --no-cache-dir --user -r requirements.txt
-
-
-# --- Stage 2: Final Runtime ---
 FROM python:3.10-slim-bookworm
 
+# 1. Set environment variables (Standard for Python Docker)
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
     PATH="/home/appuser/.local/bin:${PATH}"
 
 WORKDIR /app
 
-# Create a non-root user for security
-RUN useradd -m appuser && chown -R appuser /app
-USER appuser
+# 2. Install system-level dependencies as ROOT
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    build-essential \
+    && rm -rf /var/lib/apt/lists/*
 
-# Copy ONLY the installed python packages from the builder stage
-# This leaves behind build-essential, git, and pip cache (saving ~1GB+)
-COPY --from=builder /root/.local /home/appuser/.local
+# 3. Create the user BEFORE installing Python packages
+RUN useradd -m appuser
+
+# 4. Copy requirements and install AS THE USER
+# This avoids the permission error because the user owns their own home dir
+COPY requirements.txt .
+USER appuser
+RUN pip install --no-cache-dir --upgrade pip \
+    && pip install --no-cache-dir --user -r requirements.txt
+
+# 5. Copy the rest of the code with correct ownership
 COPY --chown=appuser:appuser . .
 
 EXPOSE 8501
